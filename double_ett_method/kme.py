@@ -132,19 +132,21 @@ class kme_model():
         return error.mean()
 
     #TODO: needs fixing wow
-    def get_psi_part(self, x_te, T_te):
+    def get_psi_part(self, x_te, w_te):
         with torch.no_grad():
             middle_ker = self.kernel(x_te,self.X_tr)
-            tmp_val = (T_te.t()@middle_ker)@self.inv
+            tmp_val = (w_te.t()@middle_ker)@self.inv
         return tmp_val
+
 
     def get_psi_square_term(self, tmp_val):
         return (tmp_val.t()@self.L_tr)@tmp_val
 
+
     def get_psi_cross_term(self, psi_part,Y_te,T_te):
         b_term = self.l(self.Y_tr,Y_te)@T_te
         return psi_part.t()@b_term
-        
+
     def get_weird_cross_term(self,left,right,other_Y_tr):
         b_term = self.l(self.Y_tr,other_Y_tr)@right
         return left.t()@b_term

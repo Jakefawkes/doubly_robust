@@ -74,17 +74,9 @@ class counterfactual_me_test():
     def calculate_test_statistic(self,L):
         T_1_L_test = L@self.T_1_weight
         T_0_L_test = L@self.T_0_weight
-        term_1 = T_1_L_test.t()@self.T_1_weight
-        term_2 = self.kme_1.get_psi_square_term(self.psi_1)
-        term_3 = -2*self.kme_1.get_psi_cross_term(self.psi_1,self.Y,self.T_1_weight)
-        term_4 = T_0_L_test.t()@self.T_0_weight
-        term_5 = self.kme_0.get_psi_square_term(self.psi_0)
-        term_6 = -2*self.kme_0.get_psi_cross_term(self.psi_0,self.Y,self.T_0_weight)
-        term_7 = -2*T_1_L_test.t()@T_0_L_test
-        term_8 = 2*self.kme_0.get_psi_cross_term(self.psi_0,self.Y,self.T_1_weight)
-        term_9 = 2*self.kme_1.get_psi_cross_term(self.psi_1,self.Y,self.T_0_weight)
-        term_10 = -2*self.kme_0.get_weird_cross_term(left=self.psi_0,right=self.psi_1,other_Y_tr=self.kme_1.Y_tr)
-        tot = term_1+term_2+term_3+term_4+term_5+term_6+term_7+term_8+term_9+term_10
+        term_1 = (self.psi_1_weight.t @ L) @ self.psi_1_weight
+        term_2=self.kme_1.get_psi_square_term(self,psi_1)
+        term_3= -2*(self.get_psi_cross_term(self, self.psi_1,self.Y,self.psi_1_weight))
         return 1/self.n**2 * tot
         # return self.omega.t()@(L@self.omega).item()
 
@@ -92,7 +84,7 @@ class counterfactual_me_test():
         self.psi_0_weight=(e-self.T_1)/(1.-e)
         self.psi_1_weight=(self.T_1-e)/(e)
         self.T_1_weight=self.T_1/e
-        self.T_0_weight = self.T_0/(1.-e) 
+        self.T_0_weight = self.T_0/(1.-e)
 
     def get_permuted2d(self,ker):
         idx = torch.randperm(self.n)
