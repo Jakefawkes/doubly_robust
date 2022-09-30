@@ -17,7 +17,7 @@ def derange(xs):
     return xs
 
 class counterfactual_me_test():
-    def __init__(self,X,Y,e,perm_e,T,kme_1,kme_0,kme_1_indep,kme_0_indep,permute_e=False,permutations=250,device='cuda:0',debug_mode=False):
+    def __init__(self,X,Y,e,perm_e,T,kme_1,kme_1_indep,permute_e=False,permutations=250,device='cuda:0',debug_mode=False):
         self.permutations = permutations
         self.X=torch.from_numpy(X).float().to(device)
         self.n= Y.shape[0]
@@ -33,9 +33,7 @@ class counterfactual_me_test():
         self.X_0 = self.X[~mask_1,:]
         self.idx_array = [i for i in range(self.n)]
         self.kme_1=kme_1
-        self.kme_0=kme_0
         self.kme_1_indep=kme_1_indep
-        self.kme_0_indep=kme_0_indep
         self.permute_e = permute_e
         self.ls =general_ker_obj.get_median_ls(self.Y,self.Y)
 
@@ -49,10 +47,8 @@ class counterfactual_me_test():
         # self.L = self.kernel.evaluate()
 
         self.create_all_weights(self.e)
-        self.calc_psi(self.X,self.kme_0,self.kme_1)
         self.ref_stat = self.calculate_test_statistic(self.L)
         print('ref errors')
-        print(self.sanity_check_estimates(self.X_0,self.X_1,self.kme_0,self.kme_1,self.Y_0,self.Y_1, self.L_0,self.L_1))
 
     def setup_Y_kernel(self,Y,name,device):
         kernel = RBFKernel(Y).to(device)
@@ -62,12 +58,10 @@ class counterfactual_me_test():
         setattr(self,'kernel_'+name,kernel)
     #permutation should occur twice
 
-    def calc_psi(self,X,kme_0,kme_1):
+    def calc_psi(self,X,kme_1):
         self.psi_1 = kme_1.get_psi_part(X, self.psi_1_weight).t()
-        self.psi_0 = kme_0.get_psi_part(X, self.psi_0_weight).t()
 
-    def sanity_check_estimates(self,X_0,X_1,kme_0,kme_1,Y_0,Y_1,L_0,L_1):
-        error_0 = kme_0.calculate_error_external(X_0,Y_0,L_0)
+    def sanity_check_estimates(self,X_0,X_1,kme_1,Y_0,Y_1,L_0,L_1):
         error_1 = kme_1.calculate_error_external(X_1,Y_1,L_1)
         return error_0.item(),error_1.item()
 
@@ -81,7 +75,6 @@ class counterfactual_me_test():
         # return self.omega.t()@(L@self.omega).item()
 
     def create_all_weights(self,e):
-        self.psi_0_weight=(e-self.T_1)/(1.-e)
         self.psi_1_weight=(self.T_1-e)/(e)
         self.T_1_weight=self.T_1/e
         self.T_0_weight = self.T_0/(1.-e)
@@ -111,7 +104,7 @@ class counterfactual_me_test():
                     perm_X_1 =X[self.Y_0.shape[0]:]
                     perm_L_0 = self.kernel_L_0(perm_Y_0,perm_Y_0)
                     perm_L_1 = self.kernel_L_1(perm_Y_1,perm_Y_1)
-                    a,b = self.sanity_check_estimates(perm_X_0,perm_X_1,self.kme_0_indep, self.kme_1_indep, perm_Y_0, perm_Y_1, perm_L_0,
+                    a,b = self.sanity_check_estimates(perm_X_0,perm_X_1, self.kme_1_indep, perm_Y_0, perm_Y_1, perm_L_0,
                                                       perm_L_1)
                     running_err_0+=a
                     running_err_1+=b
@@ -157,7 +150,6 @@ class counterfactual_me_test_correct(counterfactual_me_test):
             perm_L,idx = self.get_permuted2d(self.L)
             if self.permute_e:
                 X = self.X[idx]
-                self.calc_psi(X,self.kme_0_indep,self.kme_1_indep)
                 if self.debug_mode:
                     perm_Y  = self.Y[idx]
                     perm_Y_0 = perm_Y[:self.Y_0.shape[0]]
@@ -166,7 +158,7 @@ class counterfactual_me_test_correct(counterfactual_me_test):
                     perm_X_1 =X[self.Y_0.shape[0]:]
                     perm_L_0 = self.kernel_L_0(perm_Y_0,perm_Y_0)
                     perm_L_1 = self.kernel_L_1(perm_Y_1,perm_Y_1)
-                    a,b = self.sanity_check_estimates(perm_X_0,perm_X_1,self.kme_0_indep, self.kme_1_indep, perm_Y_0, perm_Y_1, perm_L_0,
+                    a,b = self.sanity_check_estimates(perm_X_0,perm_X_1, self.kme_1_indep, perm_Y_0, perm_Y_1, perm_L_0,
                                                       perm_L_1)
                     running_err_0+=a
                     running_err_1+=b
@@ -181,8 +173,8 @@ class counterfactual_me_test_correct(counterfactual_me_test):
 
 class counterfactual_me_test_correct_sample(counterfactual_me_test):
     def __init__(self,
-                 X,Y,e,perm_e,T,kme_1,kme_0,kme_1_indep,kme_0_indep,permute_e=False,permutations=250,device='cuda:0',debug_mode=False):
-        super(counterfactual_me_test_correct_sample, self).__init__(X,Y,e,perm_e,T,kme_1,kme_0,kme_1_indep,kme_0_indep,permute_e,permutations,device,debug_mode)
+                 X,Y,e,perm_e,T,kme_1,kme_1_indep,permute_e=False,permutations=250,device='cuda:0',debug_mode=False):
+        super(counterfactual_me_test_correct_sample, self).__init__(X,Y,e,perm_e,T,kme_1,kme_1_indep,permute_e,permutations,device,debug_mode)
         self.bernoulli_T = Bernoulli(probs=self.e)
 
     def recreate_all_weights(self,e,new_T):
