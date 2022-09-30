@@ -1,10 +1,10 @@
 import numpy as np
 from sklearn.model_selection import train_test_split
 from doubly_robust_method.propensity_classifier import *
-from doubly_robust_method.kme import *
+from double_ett_method.kme import *
 from double_ml_baseline.double_ml_baseline import *
 from doubly_robust_method.neural_kernel import *
-from doubly_robust_method.test_statistic import *
+from double_ett_method.test_statistic import *
 import os
 from scipy.stats import kstest
 import pickle
@@ -61,28 +61,13 @@ class testing_class():
                                    permutation_training=permutation_training,
                                    treatment_const=1,device=self.training_params['device'])
             kme_1.fit()
-            print('cme 1 val error: ', kme_1.best)
-            print('cme 1 lamb: ', kme_1.best_lamb)
-            kme_0=neural_kme_model(tr_X,tr_Y,tr_T,val_X,val_Y,val_T,
-                                   neural_net_parameters=self.training_params['neural_net_parameters'],
-                                   approximate_inverse=self.training_params['approximate_inverse'],
-                                   permutation_training=permutation_training
-                                   ,treatment_const=0,device=self.training_params['device'])
-            kme_0.fit()
-            print('cme 0 val error: ', kme_0.best)
-            print('cme 0 lamb: ', kme_0.best_lamb)
         else:
             kme_1=kme_model(tr_X,tr_Y,tr_T,val_X,val_Y,val_T,treatment_const=1,device=self.training_params['device'])
             kme_1.fit()
             print('cme 1 val error: ', kme_1.best)
             print('cme 1 lamb: ', kme_1.best_lamb)
             print('cme 1 ls: ', kme_1.kernel.ls.item())
-            kme_0=kme_model(tr_X,tr_Y,tr_T,val_X,val_Y,val_T,treatment_const=0,device=self.training_params['device'])
-            kme_0.fit()
-            print('cme 0 val error: ', kme_0.best)
-            print('cme 0 lamb: ', kme_0.best_lamb)
-            print('cme 0 ls: ', kme_0.kernel.ls.item())
-        return kme_0,kme_1
+        return kme_1
 
 
     def fit_class_and_embedding(self):
@@ -104,8 +89,8 @@ class testing_class():
             self.e_train = self.classifier.predict(self.tr_X_cont,self.tr_T,self.tr_X_cat)
             self.e_train = torch.nan_to_num(self.e_train, nan=0.5, posinf=0.5)
 
-        self.kme_0,self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
-        return self.kme_0,self.kme_1
+        self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
+        return self.kme_1
 
 
     def fits_for_test(self,seed):
@@ -133,19 +118,18 @@ class testing_class():
             self.e = torch.nan_to_num(self.e, nan=0.5, posinf=0.5)
             self.perm_e = torch.nan_to_num(self.perm_e, nan=0.5, posinf=0.5)
 
-        self.kme_0,self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
+        self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
 
         if self.training_params['double_estimate_kme']:
             perm_tr = torch.randperm(self.tr_X.shape[0])
             perm_val = torch.randperm(self.val_X.shape[0])
-            self.kme_0_indep,self.kme_1_indep = self.fit_y_cond_x(self.tr_X[perm_tr],self.tr_Y[perm_tr],self.tr_T,self.val_X[perm_val],self.val_Y[perm_val],self.val_T,True)
+            self.kme_1_indep = self.fit_y_cond_x(self.tr_X[perm_tr],self.tr_Y[perm_tr],self.tr_T,self.val_X[perm_val],self.val_Y[perm_val],self.val_T,True)
         else:
-            self.kme_0_indep, self.kme_1_indep=self.kme_0,self.kme_1
+            self.kme_1_indep=self.kme_1
 
     def run_test(self,seed):
         self.fits_for_test(seed)
-        self.test = counterfactual_me_test(X=self.tst_X,Y=self.tst_Y,perm_e=self.perm_e,e=self.e,T=self.tst_T,kme_1=self.kme_1,kme_0=self.kme_0,
-                                           kme_0_indep=self.kme_0_indep,
+        self.test = counterfactual_me_test(X=self.tst_X,Y=self.tst_Y,perm_e=self.perm_e,e=self.e,T=self.tst_T,kme_1=self.kme_1,
                                            kme_1_indep=self.kme_1_indep,
                                            permute_e=self.training_params['permute_e'],
                                            permutations=self.training_params['permutations'],
@@ -163,7 +147,7 @@ class testing_class():
         Y = torch.from_numpy(Y_tr[T_tr.squeeze()==treatment_const]).float().to(self.training_params['device'])
         return X,Y
 
-    def compute_expectation(self,kme_0,kme_1,y_te,t_te,x_te):
+    def compute_expectation(self,kme_1,y_te,t_te,x_te):
         # tmp_Y = torch.from_numpy(self.tr_Y).float().to(self.training_params['device'])
         Y_test = torch.from_numpy(y_te).float().to(self.training_params['device'])
         T_test =  torch.from_numpy(self.tst_T).float().to(self.training_params['device'])
@@ -176,8 +160,6 @@ class testing_class():
         #Fix the regression formula such that it takes to account the "wrong" treatment as well
         T_test_0 = 1-T_test
         e_0 = 1-e
-        embedding_0=self.L_ker(Y_test,tst_Y) *  (T_test_0.t() * (1./e_0).t()) - ((T_test_0-e_0)/e_0).t()*kme_0.get_embedding(Y_test,tst_X_cont)
-        mu_0 = embedding_0.mean(1)
         embedding_1=self.L_ker(Y_test,tst_Y) *(T_test.t() *(1./e).t()) - ((T_test-e)/e).t()*kme_1.get_embedding(Y_test,tst_X_cont)
         mu_1 = embedding_1.mean(1)
         return mu_0,mu_1
@@ -236,19 +218,18 @@ class testing_class_correct(testing_class):
             self.e = torch.nan_to_num(self.e, nan=0.5, posinf=0.5)
             self.perm_e = torch.nan_to_num(self.perm_e, nan=0.5, posinf=0.5)
 
-        self.kme_0,self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
+        self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
 
         if self.training_params['double_estimate_kme']:
             tr_og_indices,tr_binner,tr_clusters,tr_bins=self.get_stuff_for_conditional_perm(self.tr_X,self.train_e)
             val_og_indices,val_binner,val_clusters,val_bins=self.get_stuff_for_conditional_perm(self.val_X,self.val_e)
             perm_tr  = permute(n_bins=tr_bins,og_indices=tr_og_indices,clusters=tr_clusters)
             perm_val  = permute(n_bins=val_bins,og_indices=val_og_indices,clusters=val_clusters)
-            self.kme_0_indep,self.kme_1_indep = self.fit_y_cond_x(self.tr_X[perm_tr],self.tr_Y[perm_tr],self.tr_T,self.val_X[perm_val],self.val_Y[perm_val],self.val_T,False)
+            self.kme_1_indep = self.fit_y_cond_x(self.tr_X[perm_tr],self.tr_Y[perm_tr],self.tr_T,self.val_X[perm_val],self.val_Y[perm_val],self.val_T,False)
         else:
-            self.kme_0_indep, self.kme_1_indep=self.kme_0,self.kme_1
+            self.kme_1_indep=self.kme_1
 
-        self.test = counterfactual_me_test_correct(X=self.tst_X,Y=self.tst_Y,perm_e=self.perm_e,e=self.e,T=self.tst_T,kme_1=self.kme_1,kme_0=self.kme_0,
-                                           kme_0_indep=self.kme_0_indep,
+        self.test = counterfactual_me_test_correct(X=self.tst_X,Y=self.tst_Y,perm_e=self.perm_e,e=self.e,T=self.tst_T,kme_1=self.kme_1,
                                            kme_1_indep=self.kme_1_indep,
                                            permute_e=self.training_params['permute_e'],
                                            permutations=self.training_params['permutations'],
@@ -297,18 +278,17 @@ class testing_class_correct_sampling(testing_class):
             self.e = torch.nan_to_num(self.e, nan=0.5, posinf=0.5)
             self.perm_e = torch.nan_to_num(self.perm_e, nan=0.5, posinf=0.5)
 
-        self.kme_0,self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
+        self.kme_1 = self.fit_y_cond_x(self.tr_X,self.tr_Y,self.tr_T,self.val_X,self.val_Y,self.val_T,False)
 
         if self.training_params['double_estimate_kme']:
             ber_tr,ber_val = self.resample_T_setup()
             tr_T = ber_tr.sample().cpu().numpy()
             val_T = ber_val.sample().cpu().numpy()
-            self.kme_0_indep,self.kme_1_indep = self.fit_y_cond_x(self.tr_X,self.tr_Y,tr_T,self.val_X,self.val_Y,val_T,False)
+            self.kme_1_indep = self.fit_y_cond_x(self.tr_X,self.tr_Y,tr_T,self.val_X,self.val_Y,val_T,False)
         else:
-            self.kme_0_indep, self.kme_1_indep=self.kme_0,self.kme_1
+            self.kme_1_indep=self.kme_1
 
-        self.test = counterfactual_me_test_correct_sample(X=self.tst_X,Y=self.tst_Y,perm_e=self.perm_e,e=self.e,T=self.tst_T,kme_1=self.kme_1,kme_0=self.kme_0,
-                                           kme_0_indep=self.kme_0_indep,
+        self.test = counterfactual_me_test_correct_sample(X=self.tst_X,Y=self.tst_Y,perm_e=self.perm_e,e=self.e,T=self.tst_T,kme_1=self.kme_1,
                                            kme_1_indep=self.kme_1_indep,
                                            permute_e=self.training_params['permute_e'],
                                            permutations=self.training_params['permutations'],
